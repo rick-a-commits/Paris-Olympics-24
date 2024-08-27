@@ -56,6 +56,10 @@ schema = StructType([
 
 ])
 
+# creating athletes dataframe
+athletes_df = spark.read.csv("/mnt/parisolympics24/raw_data/athletes_raw_data.csv", header=True, schema= schema)
+
+
 
 from pyspark.sql.functions import col, to_date, avg
 from pyspark.sql.types import FloatType
