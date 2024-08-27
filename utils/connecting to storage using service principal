@@ -1,0 +1,25 @@
+# Set up the configurations
+
+def storage_mount(client_id, client_secret,tenant_id, container_name, storage_account_name, mounting_point):
+   configs = {
+    "fs.azure.account.auth.type": "OAuth",
+    "fs.azure.account.oauth.provider.type": "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider",
+    "fs.azure.account.oauth2.client.id": client_id,
+    "fs.azure.account.oauth2.client.secret": client_secret,
+    "fs.azure.account.oauth2.client.endpoint": f"https://login.microsoftonline.com/{tenant_id}/oauth2/token"
+    }
+   
+   # Unmount the storage if already mounted
+   mounts = dbutils.fs.mounts()
+   if any(mount.mountPoint == mounting_point for mount in mounts):
+      dbutils.fs.unmount(mounting_point)
+
+   # Mount the storage
+   dbutils.fs.mount(
+   source = f"abfss://{container_name}@{storage_account_name}.dfs.core.windows.net/",
+   mount_point = mounting_point,
+   extra_configs = configs
+   )
+
+
+
