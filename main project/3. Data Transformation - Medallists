@@ -1,0 +1,63 @@
+# Define the variables
+tenant_id = dbutils.secrets.get("parisolympics24scope", "tenantId")
+client_id = dbutils.secrets.get("parisolympics24scope", "clientId")   
+client_secret = dbutils.secrets.get("parisolympics24scope", "clientSecret")  
+container_name = "data"
+storage_account_name = "rgparisolympics24storage"
+mounting_point = "/mnt/parisolympics24"
+
+
+%run 
+"../utils/1. Connecting to storage using service principal"
+
+from pyspark.sql.types import StructType, StructField, DateType, StringType, IntegerType
+
+schema = StructType([
+    StructField("medal_date", DateType()),
+    StructField("medal_type", StringType()),
+    StructField("medal_code", StringType()),
+    StructField("name", StringType()),
+    StructField("gender", StringType()),
+    StructField("country_code", StringType()),
+    StructField("country", StringType()),
+    StructField("country_long", StringType()),
+    StructField("nationality", StringType()),
+    StructField("team", StringType()),
+    StructField("team_gender", StringType()),
+    StructField("discipline", StringType()),
+    StructField("event", StringType()),
+    StructField("event_type", StringType()),
+    StructField("url_event", StringType()),
+    StructField("birth_date", DateType()),
+    StructField("code_athlete", StringType()),
+    StructField("code_team", StringType())
+
+])
+
+
+# mounting storage
+storage_mount(client_id, client_secret, tenant_id, container_name, storage_account_name,mounting_point)
+
+# creating medallists dataframe
+medallists_df = spark.read.csv("/mnt/parisolympics24/raw_data/medallists.csv", header=True, schema = schema)
+
+
+
+from pyspark.sql.functions import expr, current_date, datediff,col, to_date, floor, col,coalesce
+#replacing null values in the team column with 'individual-country' for clarity. Adding an age column as well.
+medallists_df = medallists_df.withColumn("nationality", coalesce(col("nationality"), col("country_long"))) \
+                              .withColumn("team", expr("coalesce(team, CONCAT('Individual-', nationality))")) \
+                             .withColumn("age", floor(datediff(current_date(), col("birth_date")) / 365)) \
+                             .withColumn("age", col("age").cast("integer"))
+
+# selecting useful columns and dropping rows where the 'name' column is null
+medallists_selected_df = medallists_df.select("name", "medal_code", "gender", "age","country_code","team", "discipline", "event", "medal_date") \
+                                      .dropna(subset="name")
+
+
+
+#writing to parquet
+medallists_selected_df.write.format("parquet").mode("overwrite").partitionBy("country_code").save("/mnt/parisolympics24/transformed_data/medallists")
+
+#writing to csv
+medallists_selected_df.write.format("csv").option("header", "true").mode("overwrite").save("/mnt/parisolympics24/transformed_data/CSV/medallists")
