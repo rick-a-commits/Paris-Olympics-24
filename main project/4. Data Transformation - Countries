@@ -1,0 +1,27 @@
+# Define the variables
+tenant_id = dbutils.secrets.get("parisolympics24scope", "tenantId")
+client_id = dbutils.secrets.get("parisolympics24scope", "clientId")   
+client_secret = dbutils.secrets.get("parisolympics24scope", "clientSecret")  
+container_name = "data"
+storage_account_name = "rgparisolympics24storage"
+mounting_point = "/mnt/parisolympics24"
+
+
+%run 
+"../utils/1. Connecting to storage using service principal"
+
+# mounting storage
+storage_mount(client_id, client_secret, tenant_id, container_name, storage_account_name,mounting_point)
+
+# creating athletes dataframe from which distinct countries will be extracted
+
+athletes_df = spark.read.csv("/mnt/parisolympics24/raw_data/athletes_raw_data.csv", header=True)
+
+#creating the countries dataframe from the athletes dataframe
+countries_df = athletes_df.select("country_code", "country").distinct().orderBy("country_code")
+
+#writing parquet to transformed_data folder in the storage container
+countries_df.write.format("parquet").mode("overwrite").save("/mnt/parisolympics24/transformed_data/countries")
+
+#writing csv to transformed_data folder in the storage container
+countries_df.write.format("csv").option("header", "true").mode("overwrite").save("/mnt/parisolympics24/transformed_data/CSV/countries")
