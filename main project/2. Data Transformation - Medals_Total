@@ -1,0 +1,27 @@
+# Define the variables
+tenant_id = dbutils.secrets.get("parisolympics24scope", "tenantId")
+client_id = dbutils.secrets.get("parisolympics24scope", "clientId")   
+client_secret = dbutils.secrets.get("parisolympics24scope", "clientSecret")  
+container_name = "data"
+storage_account_name = "rgparisolympics24storage"
+mounting_point = "/mnt/parisolympics24"
+
+
+%run 
+"../utils/1. Connecting to storage using service principal"
+
+# mounting storage 
+
+storage_mount(client_id, client_secret, tenant_id, container_name, storage_account_name,mounting_point)
+
+# creating medals_total dataframe
+medals_total_df = spark.read.csv("/mnt/parisolympics24/raw_data/medals_total.csv", header=True, inferSchema=True)
+
+# selecting useful columns
+medals_total_selected_df = medals_total_df.select("country_code", "Gold Medal", "Silver Medal", "Bronze Medal", "Total")
+
+#writing to parquet
+medals_total_selected_df.write.format("parquet").mode("overwrite").save("/mnt/parisolympics24/transformed_data/medals_total")
+
+#writing to csv
+medals_total_selected_df.write.format("csv").option("header", "true").mode("overwrite").save("/mnt/parisolympics24/transformed_data/CSV/medals_total")
