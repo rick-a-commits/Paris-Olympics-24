@@ -1,0 +1,112 @@
+
+# Define the variables
+tenant_id = dbutils.secrets.get("parisolympics24scope", "tenantId")
+client_id = dbutils.secrets.get("parisolympics24scope", "clientId")   
+client_secret = dbutils.secrets.get("parisolympics24scope", "clientSecret")  
+container_name = "data"
+storage_account_name = "rgparisolympics24storage"
+mounting_point = "/mnt/parisolympics24"
+
+%run 
+"../utils/1. Connecting to storage using service principal"
+
+#mounting storage
+storage_mount(client_id, client_secret, tenant_id, container_name, storage_account_name,mounting_point)
+
+#creating schema for the athletes dataframe
+from pyspark.sql.types import StructType, StructField, StringType, FloatType, DateType, IntegerType
+
+schema = StructType([
+    StructField("code", StringType()),
+    StructField("name", StringType()),
+    StructField("name_short", StringType()),
+    StructField("name_tv", StringType()),
+    StructField("gender", StringType()),
+    StructField("function", StringType()),
+    StructField("country_code", StringType()),
+    StructField("country", StringType()),
+    StructField("country_full", StringType()),
+    StructField("nationality", StringType()),
+    StructField("nationality_full", StringType()),
+    StructField("nationality_code", StringType()),
+    StructField("height", FloatType()),
+    StructField("weight", FloatType()),
+    StructField("disciplines", StringType()),
+    StructField("events", StringType()),
+    StructField("birth_date", DateType()),
+    StructField("birth_place", StringType()),
+    StructField("birth_country", StringType()),
+    StructField("residence_place", StringType()),
+    StructField("residence_country", StringType()),
+    StructField("nickname", StringType()),
+    StructField("hobbies", StringType()),
+    StructField("occupation", StringType()),
+    StructField("education", StringType()),
+    StructField("family", StringType()),
+    StructField("lang", StringType()),
+    StructField("coach", StringType()),
+    StructField("reason", StringType()),
+    StructField("hero", StringType()),
+    StructField("influence", StringType()),
+    StructField("philosophy", StringType()),
+    StructField("sporting_relatives", StringType()),
+    StructField("ritual", StringType()),
+    StructField("other_sports", StringType())
+
+
+])
+
+
+from pyspark.sql.functions import col, to_date, avg
+from pyspark.sql.types import FloatType
+import re
+#selecting the useful columns for analysis. Also, there were some errors where the birth date values were written into the birth country and birth place columns. I am creating duplicates of those columns and formatting them as date types, which will maintain only the dates in the columns and create null values if there are strings. This will be used later to replace null values in the birth date column.
+athletes_cleaning_df = athletes_df.select("name", "gender", "country_code", "height", "disciplines", "events", "birth_date", "birth_country", "birth_place") \
+    .withColumn("birth_country_date_check", to_date(col("birth_country"))) \
+    .withColumn("birth_place_date_check", to_date(col("birth_place"))) 
+
+
+from pyspark.sql.functions import col, lit,when
+#there were some errors where the birth date values were written into the birth country and birth place columns. I am replacing those null values in the birth date column with the birth date values in the other two columns
+athletes_cleaning_df = athletes_cleaning_df.withColumn("birth_date", when(col("birth_date").isNull(), col("birth_country_date_check")) \
+                                                                            .otherwise(col("birth_date"))) \
+                                            .withColumn("birth_date", when(col("birth_date").isNull(), col("birth_place_date_check")) \
+                                                                             .otherwise(col("birth_date")))
+
+#calculating 55 percentile heights
+
+median_plus_5_height = athletes_cleaning_df.approxQuantile("height", [0.55], 0.01)[0]
+
+#replacing the 0 heights with median_plus_5_height
+athletes_cleaning_df = athletes_cleaning_df.withColumn("height", when(athletes_cleaning_df["height"] == 0, median_plus_5_height).otherwise(athletes_cleaning_df["height"]))
+
+#replacing the null heights with median_plus_5_height
+athletes_cleaning_df = athletes_cleaning_df.fillna({"height": median_plus_5_height})
+
+
+#extracting the texts from the square brackets and quotes
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import regexp_replace, col, regexp_extract
+
+athletes_cleaning_df = athletes_cleaning_df.withColumn("disciplines", regexp_extract(col("disciplines"),  r"\['(.*?)'\]", 1))
+
+athletes_cleaning_df = athletes_cleaning_df.withColumn("events", regexp_replace(col("events"), r'\[|\]|\"', ""))
+
+
+#selecting useful columns and creating age column for athletes 
+from pyspark.sql.functions import current_date, datediff,col,floor
+athletes_selected_df = athletes_cleaning_df.select("name", "gender", "country_code", "height", "disciplines", "events", "birth_date") \
+                                           .withColumn("age", floor(datediff(current_date(), col("birth_date"))/365))
+
+
+
+#dropping duplicates
+athletes_selected_df = athletes_selected_df.dropDuplicates()
+
+
+#writing to transformed_data folder in the storage container
+athletes_selected_df.write.format("parquet").mode("overwrite").save("/mnt/parisolympics24/transformed_data/athletes")
+
+#writing csv to transformed_data folder in the storage container
+athletes_selected_df.write.format("csv").option("header", "true").mode("overwrite").save("/mnt/parisolympics24/transformed_data/CSV/athletes")
+                                                                             
