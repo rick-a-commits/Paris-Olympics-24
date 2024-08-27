@@ -1,0 +1,34 @@
+-- How many athletes competed
+SELECT COUNT(name) AS num_athletes
+FROM dbo.athletes;
+
+-- How many athletes represented each country
+SELECT c.country AS country,
+       COUNT(a.name) AS num_athletes
+FROM dbo.athletes AS a 
+LEFT JOIN dbo.countries AS c
+    ON a.country_code = c.country_code
+GROUP BY country
+ORDER BY num_athletes DESC;
+
+-- Who was the oldest athlete?
+SELECT TOP 1 *
+FROM dbo.athletes
+WHERE age IS NOT NULL
+ORDER BY age DESC;
+
+-- Who was the youngest athlete?
+SELECT TOP 1 *
+FROM dbo.athletes
+WHERE age IS NOT NULL
+ORDER BY age ASC;
+
+
+-- Which countries won the most medals overall
+SELECT TOP 1 *
+FROM medals_total
+ORDER BY Total DESC;
+
+
+
+
