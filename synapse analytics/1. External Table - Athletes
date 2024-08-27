@@ -1,0 +1,28 @@
+IF NOT EXISTS (SELECT * FROM sys.external_file_formats WHERE name = 'SynapseParquetFormat') 
+	CREATE EXTERNAL FILE FORMAT [SynapseParquetFormat] 
+	WITH ( FORMAT_TYPE = PARQUET)
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.external_data_sources WHERE name = 'data_rgparisolympics24storage_dfs_core_windows_net') 
+	CREATE EXTERNAL DATA SOURCE [data_rgparisolympics24storage_dfs_core_windows_net] 
+	WITH (
+		LOCATION = 'abfss://data@rgparisolympics24storage.dfs.core.windows.net' 
+	)
+GO
+
+CREATE EXTERNAL TABLE dbo.athletes (
+	[name] nvarchar(4000),
+	[gender] nvarchar(4000),
+	[country_code] nvarchar(4000),
+	[height] float,
+	[disciplines] nvarchar(4000),
+	[events] nvarchar(4000),
+	[birth_date] date,
+	[age] bigint
+	)
+	WITH (
+	LOCATION = 'transformed_data/athletes/**',
+	DATA_SOURCE = [data_rgparisolympics24storage_dfs_core_windows_net],
+	FILE_FORMAT = [SynapseParquetFormat]
+	)
+GO
