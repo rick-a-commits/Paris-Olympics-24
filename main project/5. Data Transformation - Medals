@@ -1,0 +1,31 @@
+# Define the variables
+tenant_id = dbutils.secrets.get("parisolympics24scope", "tenantId")
+client_id = dbutils.secrets.get("parisolympics24scope", "clientId")   
+client_secret = dbutils.secrets.get("parisolympics24scope", "clientSecret")  
+container_name = "data"
+storage_account_name = "rgparisolympics24storage"
+mounting_point = "/mnt/parisolympics24"
+
+%run 
+"../utils/1. Connecting to storage using service principal"
+
+# mounting storage
+storage_mount(client_id, client_secret, tenant_id, container_name, storage_account_name,mounting_point)
+
+# creating medallists dataframe from which to extract the distinct medal_code and medal_type (for data normalisation)
+medallists_df = spark.read.csv("/mnt/parisolympics24/raw_data/medallists.csv", header=True)
+
+# creating medals dataframe
+from pyspark.sql.functions import col
+from pyspark.sql.types import IntegerType
+medals_df = medallists_df.select("medal_code", "medal_type").distinct() \
+                         .dropna(subset="medal_code") \
+                         .withColumn("medal_code", col("medal_code").cast(IntegerType())) \
+                        .orderBy("medal_code", ascending=True)
+
+
+#writing to transformed_data folder in the storage container
+medals_df.write.format("parquet").mode("overwrite").save("/mnt/parisolympics24/transformed_data/medals")
+
+#writing to transformed_data folder in the storage container
+medals_df.write.format("csv").option("header", "true").mode("overwrite").save("/mnt/parisolympics24/transformed_data/CSV/medals")
